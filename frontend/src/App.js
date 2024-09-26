@@ -49,12 +49,13 @@ function App() {
     };
   }, [isRunning, refreshInterval]);
 
-  // Fetch the board from the server
+  // Modify the fetchBoard function
   const fetchBoard = async () => {
     setIsLoading(true);
     console.log('Fetching board from:', API_URL);
     try {
-      const response = await axios.get(`${API_URL}/board`, { timeout: 10000 });
+      const timestamp = new Date().getTime();
+      const response = await axios.get(`${API_URL}/board?t=${timestamp}`, { timeout: 10000 });
       console.log('fetchBoard: Fetched board data:', response.data);
       
       const boardData = response.data;
@@ -280,6 +281,15 @@ function App() {
   const updateRefreshInterval = (newValue) => {
     setRefreshInterval(newValue);
   };
+
+  // Add a new useEffect to periodically fetch the board state when not running
+  useEffect(() => {
+    let interval;
+    if (!isRunning) {
+      interval = setInterval(fetchBoard, 5000); // Fetch every 5 seconds when not running
+    }
+    return () => clearInterval(interval);
+  }, [isRunning]);
 
   // Render the component
   return (

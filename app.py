@@ -3,6 +3,7 @@ from flask_cors import CORS
 import random
 import os
 import logging
+import threading
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -17,6 +18,8 @@ P_LIVE = 0.5  # This is now the initial value
 MAX_ROWS = 50
 MAX_COLUMNS = 50
 
+lock = threading.Lock()
+
 class Board:
     def __init__(self, rows, columns):
         self.rows = min(rows, MAX_ROWS)
@@ -29,27 +32,29 @@ class Board:
         self.board_state = [[0 for _ in range(self.columns)] for _ in range(self.rows)]
 
     def randomize(self):
-        logger.info(f"randomize: Randomizing board with P_LIVE: {self.p_live}")
-        while True:
-            self.board_state = [[1 if random.random() < self.p_live else 0 for _ in range(self.columns)] for _ in range(self.rows)]
-            if self.check_for_life():
-                break
-        logger.info(f"randomize: Board randomized. New state: {self.board_state}")
+        with lock:
+            logger.info(f"randomize: Randomizing board with P_LIVE: {self.p_live}")
+            while True:
+                self.board_state = [[1 if random.random() < self.p_live else 0 for _ in range(self.columns)] for _ in range(self.rows)]
+                if self.check_for_life():
+                    break
+            logger.info(f"randomize: Board randomized. New state: {self.board_state}")
 
     def update(self):
-        logger.info(f"update: Updating board. Current state: {self.board_state}")
-        new_board_state = [[0 for _ in range(self.columns)] for _ in range(self.rows)]
-        for i in range(self.rows):
-            for j in range(self.columns):
-                live_neighbors = count_live_neighbors(self, i, j)
-                new_board_state[i][j] = update_cell(self, live_neighbors, i, j)
-        
-        is_static = self.board_state == new_board_state
-        self.previous_state = self.board_state
-        self.board_state = new_board_state
-        
-        logger.info(f"update: Board updated. New state: {self.board_state}. Is static: {is_static}")
-        return is_static
+        with lock:
+            logger.info(f"update: Updating board. Current state: {self.board_state}")
+            new_board_state = [[0 for _ in range(self.columns)] for _ in range(self.rows)]
+            for i in range(self.rows):
+                for j in range(self.columns):
+                    live_neighbors = count_live_neighbors(self, i, j)
+                    new_board_state[i][j] = update_cell(self, live_neighbors, i, j)
+            
+            is_static = self.board_state == new_board_state
+            self.previous_state = self.board_state
+            self.board_state = new_board_state
+            
+            logger.info(f"update: Board updated. New state: {self.board_state}. Is static: {is_static}")
+            return is_static
 
     def is_static(self):
         return self.previous_state == self.board_state
@@ -62,43 +67,45 @@ class Board:
         return False
 
     def customise(self):
-        new_board = request.json.get('board')
-        logger.info(f"customize: Customizing board. Received board: {new_board}")
-        print("Received board:", new_board)  # Add this line for debugging
-        if not new_board or len(new_board) != self.rows or any(len(row) != self.columns for row in new_board):
-            print(f"Invalid input. Expected {self.rows}x{self.columns} board, got: {new_board}")  # Add this line
-            return jsonify({"error": f"Invalid input. Please provide a {self.rows}x{self.columns} board."}), 400
+        with lock:
+            new_board = request.json.get('board')
+            logger.info(f"customize: Customizing board. Received board: {new_board}")
+            print("Received board:", new_board)  # Add this line for debugging
+            if not new_board or len(new_board) != self.rows or any(len(row) != self.columns for row in new_board):
+                print(f"Invalid input. Expected {self.rows}x{self.columns} board, got: {new_board}")  # Add this line
+                return jsonify({"error": f"Invalid input. Please provide a {self.rows}x{self.columns} board."}), 400
 
-        for i, row in enumerate(new_board):
-            if not all(cell in [0, 1] for cell in row):
-                print(f"Invalid input in row {i+1}. Row contains values other than 0 or 1: {row}")  # Add this line
-                return jsonify({"error": f"Invalid input in row {i+1}. Please use only 0 or 1."}), 400
+            for i, row in enumerate(new_board):
+                if not all(cell in [0, 1] for cell in row):
+                    print(f"Invalid input in row {i+1}. Row contains values other than 0 or 1: {row}")  # Add this line
+                    return jsonify({"error": f"Invalid input in row {i+1}. Please use only 0 or 1."}), 400
 
-        self.board_state = new_board
-        logger.info(f"customize: Board customized. New state: {self.board_state}")
-        print("Board state updated:", self.board_state)  # Add this line
-        return jsonify({"message": "Board customized successfully", "board": self.board_state})
+            self.board_state = new_board
+            logger.info(f"customize: Board customized. New state: {self.board_state}")
+            print("Board state updated:", self.board_state)  # Add this line
+            return jsonify({"message": "Board customized successfully", "board": self.board_state})
 
     def change_size(self):
-        data = request.json
-        try:
-            new_rows = int(data.get('rows', self.rows))
-            new_columns = int(data.get('columns', self.columns))
-        except ValueError:
-            return jsonify({"error": "Invalid input. Rows and columns must be integers."}), 400
-        
-        if new_rows > MAX_ROWS or new_columns > MAX_COLUMNS:
-            return jsonify({"error": f"Board size cannot exceed {MAX_ROWS}x{MAX_COLUMNS}."}), 400
-        
-        self.rows = new_rows
-        self.columns = new_columns 
-        self.board_state = [[0 for _ in range(self.columns)] for _ in range(self.rows)]
-        return jsonify({
-            "message": f"Board size changed to {self.rows} rows x {self.columns} columns.",
-            "rows": self.rows,
-            "columns": self.columns,
-            "board": self.board_state
-        })
+        with lock:
+            data = request.json
+            try:
+                new_rows = int(data.get('rows', self.rows))
+                new_columns = int(data.get('columns', self.columns))
+            except ValueError:
+                return jsonify({"error": "Invalid input. Rows and columns must be integers."}), 400
+            
+            if new_rows > MAX_ROWS or new_columns > MAX_COLUMNS:
+                return jsonify({"error": f"Board size cannot exceed {MAX_ROWS}x{MAX_COLUMNS}."}), 400
+            
+            self.rows = new_rows
+            self.columns = new_columns 
+            self.board_state = [[0 for _ in range(self.columns)] for _ in range(self.rows)]
+            return jsonify({
+                "message": f"Board size changed to {self.rows} rows x {self.columns} columns.",
+                "rows": self.rows,
+                "columns": self.columns,
+                "board": self.board_state
+            })
 
     def save_board(self):
         board_data = {
@@ -117,13 +124,20 @@ class Board:
         }
 
     def clear(self):
-        self.board_state = [[0 for _ in range(self.columns)] for _ in range(self.rows)]
+        with lock:
+            self.board_state = [[0 for _ in range(self.columns)] for _ in range(self.rows)]
 
     def fill(self):
-        self.board_state = [[1 for _ in range(self.columns)] for _ in range(self.rows)]
+        with lock:
+            self.board_state = [[1 for _ in range(self.columns)] for _ in range(self.rows)]
 
     def set_p_live(self, p_live):
         self.p_live = max(0, min(1, p_live))  # Ensure p_live is between 0 and 1
+
+    def set_board_state(self, new_state):
+        with lock:
+            logger.info(f"set_board_state: Changing board state from {self.board_state} to {new_state}")
+            self.board_state = new_state
 
 def count_live_neighbors(board, row, col):
     live_neighbors = 0
@@ -148,8 +162,9 @@ board = Board(ROWS, COLUMNS)
 
 @app.route('/api/board', methods=['GET'])
 def get_board():
-    logger.info(f"get_board: Sending current board state: {board.to_dict()}")
-    return jsonify(board.to_dict())
+    with lock:
+        logger.info(f"get_board: Sending current board state: {board.to_dict()}")
+        return jsonify(board.to_dict())
 
 @app.route('/api/randomize', methods=['POST'])
 def randomize_board():
