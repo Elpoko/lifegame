@@ -2,6 +2,11 @@ from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 import random
 import os
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__, static_folder='frontend/build', static_url_path='')
 CORS(app, resources={r"/api/*": {"origins": "*"}})
@@ -24,12 +29,15 @@ class Board:
         self.board_state = [[0 for _ in range(self.columns)] for _ in range(self.rows)]
 
     def randomize(self):
+        logger.info(f"randomize: Randomizing board with P_LIVE: {self.p_live}")
         while True:
             self.board_state = [[1 if random.random() < self.p_live else 0 for _ in range(self.columns)] for _ in range(self.rows)]
             if self.check_for_life():
                 break
+        logger.info(f"randomize: Board randomized. New state: {self.board_state}")
 
     def update(self):
+        logger.info(f"update: Updating board. Current state: {self.board_state}")
         new_board_state = [[0 for _ in range(self.columns)] for _ in range(self.rows)]
         for i in range(self.rows):
             for j in range(self.columns):
@@ -39,7 +47,9 @@ class Board:
         self.previous_state = self.board_state
         self.board_state = new_board_state
         
-        return self.is_static()
+        is_static = self.is_static()
+        logger.info(f"update: Board updated. New state: {self.board_state}. Is static: {is_static}")
+        return is_static
 
     def is_static(self):
         return self.previous_state == self.board_state
@@ -53,6 +63,7 @@ class Board:
 
     def customise(self):
         new_board = request.json.get('board')
+        logger.info(f"customize: Customizing board. Received board: {new_board}")
         print("Received board:", new_board)  # Add this line for debugging
         if not new_board or len(new_board) != self.rows or any(len(row) != self.columns for row in new_board):
             print(f"Invalid input. Expected {self.rows}x{self.columns} board, got: {new_board}")  # Add this line
@@ -64,6 +75,7 @@ class Board:
                 return jsonify({"error": f"Invalid input in row {i+1}. Please use only 0 or 1."}), 400
 
         self.board_state = new_board
+        logger.info(f"customize: Board customized. New state: {self.board_state}")
         print("Board state updated:", self.board_state)  # Add this line
         return jsonify({"message": "Board customized successfully", "board": self.board_state})
 
@@ -136,6 +148,7 @@ board = Board(ROWS, COLUMNS)
 
 @app.route('/api/board', methods=['GET'])
 def get_board():
+    logger.info(f"get_board: Sending current board state: {board.to_dict()}")
     return jsonify(board.to_dict())
 
 @app.route('/api/randomize', methods=['POST'])
@@ -152,6 +165,7 @@ def randomize_board():
 @app.route('/api/update', methods=['POST'])
 def update_board():
     is_static = board.update()
+    logger.info(f"update_board: Board updated. Is static: {is_static}. Current state: {board.board_state}")
     return jsonify({"board": board.board_state, "isStatic": is_static})
 
 @app.route('/api/change_size', methods=['POST'])
@@ -206,4 +220,5 @@ def serve(path):
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
+    logger.info(f"Starting server on port {port}")
     app.run(host='0.0.0.0', port=port)

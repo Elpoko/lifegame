@@ -39,32 +39,25 @@ function App() {
   // Fetch the board from the server
   const fetchBoard = async () => {
     setIsLoading(true);
-    console.log(API_URL);
+    console.log('Fetching board from:', API_URL);
     try {
       const response = await axios.get(`${API_URL}/board`);
-      console.log('fetchBoard Raw response:', response);
-      console.log('fetchBoard Response data:', response.data);
+      console.log('fetchBoard: Fetched board data:', response.data);
       
       const boardData = response.data;
-      console.log('fetchBoard Board data:', boardData);
       
       if (boardData && Array.isArray(boardData.board)) {
-        console.log('Board array:', boardData.board);
-        console.log('fetchBoard Rows:', boardData.rows);
-        console.log('fetchBoard Columns:', boardData.columns);
-        console.log('fetchBoard P_LIVE:', boardData.p_live);
-
+        console.log('fetchBoard: Setting board state:', boardData.board);
         setBoard(boardData.board);
         setRows(boardData.rows);
         setColumns(boardData.columns);
-        setPLive(boardData.p_live);  // Set the initial p_live value from the server
-        setError(null); // Clear any previous errors
+        setPLive(boardData.p_live);
+        setError(null);
       } else {
-        console.error('Error: Invalid board data');
-        console.log('Invalid board data:', boardData);
+        console.error('fetchBoard: Error: Invalid board data', boardData);
       }
     } catch (error) {
-      console.error('Error fetching board:', error);
+      console.error('fetchBoard: Error fetching board:', error);
       setError('Failed to fetch the board. Please try again.');
     } finally {
       setIsLoading(false);
@@ -113,8 +106,11 @@ function App() {
   // Update the board state by requesting the next generation from the server
   const updateBoard = async () => {
     try {
+      console.log('updateBoard: Updating board');
       const response = await axios.post(`${API_URL}/update`);
+      console.log('updateBoard: Update response:', response.data);
       if (response.data && Array.isArray(response.data.board)) {
+        console.log('updateBoard: Setting new board state:', response.data.board);
         setBoard(response.data.board);
         
         if (response.data.isStatic) {
@@ -122,11 +118,11 @@ function App() {
           console.log("Board has reached a static state");
         }
       } else {
-        console.error('updateBoard:Invalid board data received:', response.data);
+        console.error('updateBoard: Invalid board data received:', response.data);
       }
     } catch (error) {
-      console.error('updateBoard:Error updating board:', error);
-      setIsRunning(false);  // Stop the simulation if there's an error
+      console.error('updateBoard: Error updating board:', error);
+      setIsRunning(false);
     }
   };
 
