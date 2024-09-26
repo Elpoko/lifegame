@@ -5,7 +5,7 @@ import './App.css';
 // Set the API URL based on the environment
 const API_URL = process.env.NODE_ENV === 'production'
   ? '/api'  // In production, the API is served from the same domain
-  : process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+  : process.env.REACT_APP_API_URL || `http://localhost:${process.env.PORT || 5000}/api`;
 
 console.log('API_URL:', API_URL);  // Log the API_URL for debugging
 
