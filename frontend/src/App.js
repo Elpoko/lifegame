@@ -35,7 +35,7 @@ function App() {
       
       const boardData = response.data;
       
-      if (boardData && Array.isArray(boardData.board)) {
+      if (boardData && Array.isArray(boardData.board) && boardData.rows && boardData.columns && typeof boardData.p_live === 'number') {
         console.log('fetchBoard: Setting board state:', boardData.board);
         setBoard(boardData.board);
         setRows(boardData.rows);
@@ -47,13 +47,24 @@ function App() {
         setError('Invalid board data received. Please try again.');
       }
     } catch (error) {
-      console.error('fetchBoard: Error fetching board:', error);
+      console.error('fetchBoard: Error fetching board:', error.message, error.stack);
+      if (error.response) {
+        console.error('Error response:', error.response.data, error.response.status);
+      } else if (error.request) {
+        console.error('Error request:', error.request);
+      }
       setError('Failed to fetch the board. Please try again.');
     } finally {
       setIsLoading(false);
     }
   }, []);
 
+  // Fetch the initial board when the component mounts
+  useEffect(() => {
+    fetchBoard();
+  }, [fetchBoard]);
+
+  // Memoize the updateBoard function
   const updateBoard = useCallback(async () => {
     if (!isRunning) {
       console.log('updateBoard called but game is not running, skipping update');
@@ -66,7 +77,6 @@ function App() {
       if (response.data && Array.isArray(response.data.board)) {
         console.log('updateBoard: Setting new board state:', response.data.board);
         setBoard(response.data.board);
-        
         if (response.data.isStatic) {
           console.log("Board has reached a static state, stopping game");
           setIsRunning(false);
@@ -81,29 +91,22 @@ function App() {
       }
       setIsRunning(false);
     }
-  }, [isRunning]);
-
-  // Fetch the initial board when the component mounts
-  useEffect(() => {
-    fetchBoard();
-  }, [fetchBoard]);
+  }, [isRunning, API_URL]);
 
   // Modified useEffect for board updates
   useEffect(() => {
+    let intervalId;
     if (isRunning) {
       console.log(`Setting up interval for ${refreshInterval}ms`);
-      updateIntervalRef.current = setInterval(updateBoard, refreshInterval);
+      intervalId = setInterval(updateBoard, refreshInterval);
     } else {
       console.log('Clearing interval');
-      if (updateIntervalRef.current) {
-        clearInterval(updateIntervalRef.current);
-      }
     }
 
     return () => {
-      if (updateIntervalRef.current) {
+      if (intervalId) {
         console.log('Cleaning up interval');
-        clearInterval(updateIntervalRef.current);
+        clearInterval(intervalId);
       }
     };
   }, [isRunning, refreshInterval, updateBoard]);
@@ -152,11 +155,7 @@ function App() {
     if (customizing) {
       await finishCustomizing();
     }
-    setIsRunning(prevIsRunning => {
-      console.log(`Toggling running state from ${prevIsRunning} to ${!prevIsRunning}`);
-      return !prevIsRunning;
-    });
-    setCustomizing(false);
+    setIsRunning(prevIsRunning => !prevIsRunning);
   };
 
   // Change the board size on the server
@@ -224,6 +223,8 @@ function App() {
     } catch (error) {
       console.error('finishCustomizing: Error customizing board:', error);
       setError('Failed to set custom board. Please try again.');
+    } finally {
+      setCustomizing(false);  // Always set customizing to false when finished
     }
   };
 
@@ -235,7 +236,11 @@ function App() {
         setSizeError(null);
       }, 5000);
     }
-    return () => clearTimeout(timer);
+    return () => {
+      if (timer) {
+        clearTimeout(timer);
+      }
+    };
   }, [sizeError]);
 
   // New function to clear the board
@@ -244,11 +249,14 @@ function App() {
       const response = await axios.post(`${API_URL}/clear`);
       if (response.data && Array.isArray(response.data.board)) {
         setBoard(response.data.board);
+        console.log('clearBoard: Board cleared successfully');
       } else {
         console.error('clearBoard: Invalid board data received:', response.data);
+        setError('Failed to clear the board. Please try again.');
       }
     } catch (error) {
-      console.error('Error clearing board:', error);
+      console.error('clearBoard: Error clearing board:', error);
+      setError('Failed to clear the board. Please try again.');
     }
   };
 
@@ -258,38 +266,31 @@ function App() {
       const response = await axios.post(`${API_URL}/fill`);
       if (response.data && Array.isArray(response.data.board)) {
         setBoard(response.data.board);
+        console.log('fillBoard: Board filled successfully');
       } else {
         console.error('fillBoard: Invalid board data received:', response.data);
+        setError('Failed to fill the board. Please try again.');
       }
     } catch (error) {
-      console.error('Error filling board:', error);
+      console.error('fillBoard: Error filling board:', error);
+      setError('Failed to fill the board. Please try again.');
     }
   };
 
   // New function to update P_LIVE
   const updatePLive = async (newValue) => {
-    setPLive(newValue);
     try {
       await axios.post(`${API_URL}/set_p_live`, { p_live: newValue });
+      setPLive(newValue);
     } catch (error) {
       console.error('Error updating P_LIVE:', error);
+      setError('Failed to update initial life probability. Please try again.');
     }
   };
-
   // New function to update refresh interval
   const updateRefreshInterval = (newValue) => {
     setRefreshInterval(newValue);
   };
-
-  // Add a new useEffect to periodically fetch the board state when not running
-  // Remove the periodic refresh when not running
-  useEffect(() => {
-    // This effect now only runs when isRunning changes
-    if (isRunning) {
-      // If the game starts running, we might want to fetch the latest board state once
-      fetchBoard();
-    }
-  }, [isRunning, fetchBoard]);
 
   // Render the component
   return (
@@ -341,7 +342,7 @@ function App() {
           <button onClick={changeBoardSize}>Change Size</button>
         </div>
         {customizing ? (
-          <button onClick={() => setCustomizing(false)}>Finish Customizing</button>
+          <button onClick={finishCustomizing}>Finish Customizing</button>
         ) : (
           <button onClick={customizeBoard}>Custom Board</button>
         )}
