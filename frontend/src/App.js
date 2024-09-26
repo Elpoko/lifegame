@@ -27,14 +27,25 @@ function App() {
     fetchBoard();
   }, []);
 
-  // Set up an interval to update the board when the simulation is running
+  // Modify the useEffect hook for board updates
   useEffect(() => {
     let interval;
     if (isRunning) {
-      interval = setInterval(updateBoard, refreshInterval);
+      console.log(`Setting up interval for ${refreshInterval}ms`);
+      interval = setInterval(() => {
+        console.log('Interval triggered, updating board');
+        updateBoard();
+      }, refreshInterval);
+    } else {
+      console.log('Clearing interval');
     }
-    return () => clearInterval(interval);
-  }, [isRunning, refreshInterval]); // Add refreshInterval as a dependency
+    return () => {
+      if (interval) {
+        console.log('Cleaning up interval');
+        clearInterval(interval);
+      }
+    };
+  }, [isRunning, refreshInterval]);
 
   // Fetch the board from the server
   const fetchBoard = async () => {
@@ -103,8 +114,12 @@ function App() {
     }
   };
 
-  // Update the board state by requesting the next generation from the server
+  // Modify the updateBoard function
   const updateBoard = async () => {
+    if (!isRunning) {
+      console.log('updateBoard called but game is not running, skipping update');
+      return;
+    }
     try {
       console.log('updateBoard: Updating board');
       const response = await axios.post(`${API_URL}/update`);
@@ -114,8 +129,8 @@ function App() {
         setBoard(response.data.board);
         
         if (response.data.isStatic) {
+          console.log("Board has reached a static state, stopping game");
           setIsRunning(false);
-          console.log("Board has reached a static state");
         }
       } else {
         console.error('updateBoard: Invalid board data received:', response.data);
@@ -126,13 +141,15 @@ function App() {
     }
   };
 
-  // Toggle the simulation running state
+  // Modify the toggleRunning function
   const toggleRunning = async () => {
     if (customizing) {
-      // If we're customizing, save the board before starting
       await finishCustomizing();
     }
-    setIsRunning(!isRunning);
+    setIsRunning(prevIsRunning => {
+      console.log(`Toggling running state from ${prevIsRunning} to ${!prevIsRunning}`);
+      return !prevIsRunning;
+    });
     setCustomizing(false);
   };
 

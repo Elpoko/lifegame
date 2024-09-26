@@ -44,10 +44,10 @@ class Board:
                 live_neighbors = count_live_neighbors(self, i, j)
                 new_board_state[i][j] = update_cell(self, live_neighbors, i, j)
         
+        is_static = self.board_state == new_board_state
         self.previous_state = self.board_state
         self.board_state = new_board_state
         
-        is_static = self.is_static()
         logger.info(f"update: Board updated. New state: {self.board_state}. Is static: {is_static}")
         return is_static
 
