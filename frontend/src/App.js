@@ -283,12 +283,13 @@ function App() {
   };
 
   // Add a new useEffect to periodically fetch the board state when not running
+  // Remove the periodic refresh when not running
   useEffect(() => {
-    let interval;
-    if (!isRunning) {
-      interval = setInterval(fetchBoard, 5000); // Fetch every 5 seconds when not running
+    // This effect now only runs when isRunning changes
+    if (isRunning) {
+      // If the game starts running, we might want to fetch the latest board state once
+      fetchBoard();
     }
-    return () => clearInterval(interval);
   }, [isRunning]);
 
   // Render the component
