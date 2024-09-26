@@ -1,309 +1,162 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import './App.css';
 
-// Set the API URL based on the environment
-const API_URL = process.env.NODE_ENV === 'production'
-  ? '/api'
-  : `http://localhost:${process.env.PORT || 5000}/api`;
+const API_URL = process.env.NODE_ENV === 'production' ? '/api' : `http://localhost:${process.env.PORT || 5000}/api`;
 
-console.log('API_URL:', API_URL);  // Log the API_URL for debugging
+console.log('API_URL:', API_URL);
 
 function App() {
-  // State variables
-  const [board, setBoard] = useState([]);
-  const [isRunning, setIsRunning] = useState(false);
-  const [rows, setRows] = useState(8);
-  const [columns, setColumns] = useState(8);
-  const [customizing, setCustomizing] = useState(false);
-  const [error, setError] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [sizeError, setSizeError] = useState(null);
-  const [pLive, setPLive] = useState(0.5);
-  const [refreshInterval, setRefreshInterval] = useState(200);
+  const [boardState, setBoardState] = useState({ board: [], rows: 8, columns: 8 });
+  const [status, setStatus] = useState({ isLoading: true, error: null });
+  const [gameSettings, setGameSettings] = useState({ isRunning: false, pLive: 0.5, refreshInterval: 200 });
 
-  const updateIntervalRef = useRef(null);
-
-  // Memoize functions that are used in useEffect dependencies
   const fetchBoard = useCallback(async () => {
-    setIsLoading(true);
-    console.log('Fetching board from:', API_URL);
+    setStatus({ isLoading: true, error: null });
     try {
       const timestamp = new Date().getTime();
       const response = await axios.get(`${API_URL}/board?t=${timestamp}`, { timeout: 10000 });
-      console.log('fetchBoard: Fetched board data:', response.data);
+      const { board, rows, columns, p_live } = response.data;
       
-      const boardData = response.data;
-      
-      if (boardData && Array.isArray(boardData.board) && boardData.rows && boardData.columns && typeof boardData.p_live === 'number') {
-        console.log('fetchBoard: Setting board state:', boardData.board);
-        setBoard(boardData.board);
-        setRows(boardData.rows);
-        setColumns(boardData.columns);
-        setPLive(boardData.p_live);
-        setError(null);
+      if (board && Array.isArray(board) && rows && columns && typeof p_live === 'number') {
+        setBoardState({ board, rows, columns });
+        setGameSettings(prev => ({ ...prev, pLive: p_live }));
       } else {
-        console.error('fetchBoard: Error: Invalid board data', boardData);
-        setError('Invalid board data received. Please try again.');
+        throw new Error('Invalid board data received');
       }
     } catch (error) {
-      console.error('fetchBoard: Error fetching board:', error.message, error.stack);
-      if (error.response) {
-        console.error('Error response:', error.response.data, error.response.status);
-      } else if (error.request) {
-        console.error('Error request:', error.request);
-      }
-      setError('Failed to fetch the board. Please try again.');
+      console.error('fetchBoard: Error:', error);
+      setStatus({ isLoading: false, error: 'Failed to fetch the board. Please try again.' });
     } finally {
-      setIsLoading(false);
+      setStatus(prev => ({ ...prev, isLoading: false }));
     }
   }, []);
 
-  // Fetch the initial board when the component mounts
   useEffect(() => {
     fetchBoard();
   }, [fetchBoard]);
 
-  // Memoize the updateBoard function
   const updateBoard = useCallback(async () => {
-    if (!isRunning) {
-      console.log('updateBoard called but game is not running, skipping update');
-      return;
-    }
+    if (!gameSettings.isRunning) return;
+    
     try {
-      console.log('updateBoard: Updating board');
       const response = await axios.post(`${API_URL}/update`, null, { timeout: 5000 });
-      console.log('updateBoard: Update response:', response.data);
       if (response.data && Array.isArray(response.data.board)) {
-        console.log('updateBoard: Setting new board state:', response.data.board);
-        setBoard(response.data.board);
+        setBoardState(prev => ({ ...prev, board: response.data.board }));
         if (response.data.isStatic) {
-          console.log("Board has reached a static state, stopping game");
-          setIsRunning(false);
+          setGameSettings(prev => ({ ...prev, isRunning: false }));
         }
       } else {
-        console.error('updateBoard: Invalid board data received:', response.data);
+        throw new Error('Invalid board data received');
       }
     } catch (error) {
-      console.error('updateBoard: Error updating board:', error);
-      if (error.code === 'ECONNABORTED') {
-        console.error('Request timed out');
-      }
-      setIsRunning(false);
+      console.error('updateBoard: Error:', error);
+      setGameSettings(prev => ({ ...prev, isRunning: false }));
     }
-  }, [isRunning, API_URL]);
+  }, [gameSettings.isRunning]);
 
-  // Modified useEffect for board updates
   useEffect(() => {
     let intervalId;
-    if (isRunning) {
-      console.log(`Setting up interval for ${refreshInterval}ms`);
-      intervalId = setInterval(updateBoard, refreshInterval);
-    } else {
-      console.log('Clearing interval');
+    if (gameSettings.isRunning) {
+      intervalId = setInterval(updateBoard, gameSettings.refreshInterval);
     }
+    return () => clearInterval(intervalId);
+  }, [gameSettings.isRunning, gameSettings.refreshInterval, updateBoard]);
 
-    return () => {
-      if (intervalId) {
-        console.log('Cleaning up interval');
-        clearInterval(intervalId);
-      }
-    };
-  }, [isRunning, refreshInterval, updateBoard]);
+  const toggleRunning = () => setGameSettings(prev => ({ ...prev, isRunning: !prev.isRunning }));
 
-  // Validate the board structure
-  const isValidBoard = useCallback((board) => {
-    if (!Array.isArray(board) || board.length !== rows) {
-      return false;
-    }
-    for (let i = 0; i < rows; i++) {
-      if (!Array.isArray(board[i]) || board[i].length !== columns) {
-        return false;
-      }
-      for (let j = 0; j < columns; j++) {
-        if (typeof board[i][j] !== 'number' || (board[i][j] !== 0 && board[i][j] !== 1)) {
-          return false;
-        }
-      }
-    }
-    return true;
-  }, [rows, columns]);
-
-  // Request a new randomized board from the server
   const randomizeBoard = async () => {
     try {
-      const response = await axios.post(`${API_URL}/randomize`, { p_live: pLive });
-      const boardData = response.data;
-      if (boardData && Array.isArray(boardData.board) && 
-          boardData.board.length === boardData.rows && 
-          boardData.board.every(row => Array.isArray(row) && row.length === boardData.columns)) {
-        setBoard(boardData.board);
-        setRows(boardData.rows);
-        setColumns(boardData.columns);
-        console.log("randomizeBoard successful")
-        console.log(boardData)
-      } else {
-        console.error('randomizeBoard:Invalid board data received:', boardData);
-      }
+      const response = await axios.post(`${API_URL}/randomize`, { p_live: gameSettings.pLive });
+      const { board, rows, columns } = response.data;
+      setBoardState({ board, rows, columns });
     } catch (error) {
       console.error('Error randomizing board:', error);
+      setStatus(prev => ({ ...prev, error: 'Failed to randomize the board. Please try again.' }));
     }
   };
 
-  // Modified toggleRunning function
-  const toggleRunning = async () => {
-    if (customizing) {
-      await finishCustomizing();
-    }
-    setIsRunning(prevIsRunning => !prevIsRunning);
-  };
-
-  // Change the board size on the server
   const changeBoardSize = async () => {
+    const { rows, columns } = boardState;
     if (rows <= 0 || columns <= 0 || rows > 50 || columns > 50) {
-      setSizeError('Invalid board size. Size must be between 1x1 and 50x50.');
+      setStatus(prev => ({ ...prev, error: 'Invalid board size. Size must be between 1x1 and 50x50.' }));
       return;
     }
 
     try {
       const response = await axios.post(`${API_URL}/change_size`, { rows, columns });
-      if (response.data && Array.isArray(response.data.board)) {
-        setBoard(response.data.board);
-        setRows(response.data.rows);
-        setColumns(response.data.columns);
-        setSizeError(null);
-      } else {
-        throw new Error('Invalid response data');
-      }
+      const { board, rows: newRows, columns: newColumns } = response.data;
+      setBoardState({ board, rows: newRows, columns: newColumns });
+      setStatus(prev => ({ ...prev, error: null }));
     } catch (error) {
       console.error('Error changing board size:', error);
-      if (error.response && error.response.status === 400) {
-        setSizeError('Board size too large. Maximum size is 50x50.');
-      } else {
-        setSizeError('Failed to change board size. Please try again.');
-      }
+      setStatus(prev => ({ ...prev, error: 'Failed to change board size. Please try again.' }));
     }
   };
 
-  // Toggle the state of a cell when customizing the board
   const toggleCell = useCallback((i, j) => {
-    if (!customizing) return;
-    setBoard(prevBoard => {
-      const newBoard = prevBoard.map((row, rowIndex) =>
+    setBoardState(prev => ({
+      ...prev,
+      board: prev.board.map((row, rowIndex) =>
         row.map((cell, colIndex) =>
-          rowIndex === i && colIndex === j ? (cell === 1 ? 0 : 1) : cell
+          rowIndex === i && colIndex === j ? 1 - cell : cell
         )
-      );
-      console.log('Cell toggled:', i, j, 'New board state:', newBoard);
-      return newBoard;
-    });
-  }, [customizing]);
+      )
+    }));
+  }, []);
 
-  // Enter customization mode
-  const customizeBoard = () => {
-    if (isRunning) {
-      setIsRunning(false);
-    }
-    setCustomizing(true);
-  };
-
-  // Finish customizing and send the custom board to the server
-  const finishCustomizing = async () => {
+  const updatePLive = async (newValue) => {
     try {
-      console.log('Sending custom board to server:', board);
-      const response = await axios.post(`${API_URL}/customize`, { board });
-      console.log('Server response:', response.data);
-      if (response.data && Array.isArray(response.data.board)) {
-        setBoard(response.data.board);
-        console.log('Custom board set successfully:', response.data.board);
-      } else {
-        console.error('finishCustomizing: Invalid board data received:', response.data);
-        setError('Failed to set custom board. Please try again.');
-      }
+      await axios.post(`${API_URL}/set_p_live`, { p_live: newValue });
+      setGameSettings(prev => ({ ...prev, pLive: newValue }));
     } catch (error) {
-      console.error('finishCustomizing: Error customizing board:', error);
-      setError('Failed to set custom board. Please try again.');
-    } finally {
-      setCustomizing(false);  // Always set customizing to false when finished
+      console.error('Error updating P_LIVE:', error);
+      setStatus(prev => ({ ...prev, error: 'Failed to update initial life probability. Please try again.' }));
     }
   };
 
-  // New useEffect hook to handle error fading
-  useEffect(() => {
-    let timer;
-    if (sizeError) {
-      timer = setTimeout(() => {
-        setSizeError(null);
-      }, 5000);
-    }
-    return () => {
-      if (timer) {
-        clearTimeout(timer);
-      }
-    };
-  }, [sizeError]);
+  const updateRefreshInterval = (newValue) => {
+    setGameSettings(prev => ({ ...prev, refreshInterval: newValue }));
+  };
 
-  // New function to clear the board
   const clearBoard = async () => {
     try {
       const response = await axios.post(`${API_URL}/clear`);
       if (response.data && Array.isArray(response.data.board)) {
-        setBoard(response.data.board);
-        console.log('clearBoard: Board cleared successfully');
+        setBoardState(prev => ({ ...prev, board: response.data.board }));
       } else {
-        console.error('clearBoard: Invalid board data received:', response.data);
-        setError('Failed to clear the board. Please try again.');
+        throw new Error('Invalid board data received');
       }
     } catch (error) {
-      console.error('clearBoard: Error clearing board:', error);
-      setError('Failed to clear the board. Please try again.');
+      console.error('clearBoard: Error:', error);
+      setStatus(prev => ({ ...prev, error: 'Failed to clear the board. Please try again.' }));
     }
   };
 
-  // New function to fill the board
   const fillBoard = async () => {
     try {
       const response = await axios.post(`${API_URL}/fill`);
       if (response.data && Array.isArray(response.data.board)) {
-        setBoard(response.data.board);
-        console.log('fillBoard: Board filled successfully');
+        setBoardState(prev => ({ ...prev, board: response.data.board }));
       } else {
-        console.error('fillBoard: Invalid board data received:', response.data);
-        setError('Failed to fill the board. Please try again.');
+        throw new Error('Invalid board data received');
       }
     } catch (error) {
-      console.error('fillBoard: Error filling board:', error);
-      setError('Failed to fill the board. Please try again.');
+      console.error('fillBoard: Error:', error);
+      setStatus(prev => ({ ...prev, error: 'Failed to fill the board. Please try again.' }));
     }
   };
 
-  // New function to update P_LIVE
-  const updatePLive = async (newValue) => {
-    try {
-      await axios.post(`${API_URL}/set_p_live`, { p_live: newValue });
-      setPLive(newValue);
-    } catch (error) {
-      console.error('Error updating P_LIVE:', error);
-      setError('Failed to update initial life probability. Please try again.');
-    }
-  };
-  // New function to update refresh interval
-  const updateRefreshInterval = (newValue) => {
-    setRefreshInterval(newValue);
-  };
-
-  // Render the component
   return (
     <div className="App">
       <h1>Game of Life</h1>
-      {/* Render the board */}
       <div className="board">
-        {isLoading ? (
+        {status.isLoading ? (
           <p>Loading board...</p>
-        ) : error ? (
-          <p className="error">{error}</p>
-        ) : board && Array.isArray(board) && board.length > 0 ? (
-          board.map((row, i) => (
+        ) : status.error ? (
+          <p className="error">{status.error}</p>
+        ) : boardState.board && Array.isArray(boardState.board) && boardState.board.length > 0 ? (
+          boardState.board.map((row, i) => (
             <div key={i} className="row">
               {Array.isArray(row) && row.map((cell, j) => (
                 <div 
@@ -318,51 +171,43 @@ function App() {
           <p>No board data available.</p>
         )}
       </div>
-      {/* Control buttons and inputs */}
       <div className="controls">
         <button onClick={randomizeBoard}>Randomize</button>
-        <button onClick={toggleRunning}>{isRunning ? 'Stop' : 'Start'}</button>
+        <button onClick={toggleRunning}>{gameSettings.isRunning ? 'Stop' : 'Start'}</button>
         <button onClick={clearBoard}>Clear</button>
         <button onClick={fillBoard}>Fill</button>
         <div>
           <input 
             type="number" 
-            value={rows} 
-            onChange={(e) => setRows(parseInt(e.target.value))} 
+            value={boardState.rows} 
+            onChange={(e) => setBoardState(prev => ({ ...prev, rows: parseInt(e.target.value) }))} 
             min="1"
             max="50"
           />
           <input 
             type="number" 
-            value={columns} 
-            onChange={(e) => setColumns(parseInt(e.target.value))} 
+            value={boardState.columns} 
+            onChange={(e) => setBoardState(prev => ({ ...prev, columns: parseInt(e.target.value) }))} 
             min="1"
             max="50"
           />
           <button onClick={changeBoardSize}>Change Size</button>
         </div>
-        {customizing ? (
-          <button onClick={finishCustomizing}>Finish Customizing</button>
-        ) : (
-          <button onClick={customizeBoard}>Custom Board</button>
-        )}
-        {/* New slider for P_LIVE */}
         <div className="p-live-control">
-          <label htmlFor="p-live-slider">Initial Life Probability: {pLive.toFixed(2)}</label>
+          <label htmlFor="p-live-slider">Initial Life Probability: {gameSettings.pLive.toFixed(2)}</label>
           <input
             id="p-live-slider"
             type="range"
             min="0"
             max="1"
             step="0.01"
-            value={pLive}
+            value={gameSettings.pLive}
             onChange={(e) => updatePLive(parseFloat(e.target.value))}
           />
         </div>
-        {/* New slider for refresh interval */}
         <div className="refresh-interval-control">
           <label htmlFor="refresh-interval-slider">
-            Step duration: {refreshInterval}ms
+            Step duration: {gameSettings.refreshInterval}ms
           </label>
           <input
             id="refresh-interval-slider"
@@ -370,14 +215,13 @@ function App() {
             min="50"
             max="1000"
             step="50"
-            value={refreshInterval}
+            value={gameSettings.refreshInterval}
             onChange={(e) => updateRefreshInterval(parseInt(e.target.value))}
           />
         </div>
       </div>
-      {/* Updated section for size-related errors with fade-out animation */}
-      {sizeError && (
-        <p className="size-error fade-out">{sizeError}</p>
+      {status.error && (
+        <p className="size-error fade-out">{status.error}</p>
       )}
     </div>
   );
