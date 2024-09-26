@@ -68,12 +68,16 @@ function App() {
     let intervalId;
     if (gameSettings.isRunning) {
       console.log(`Setting up interval for ${gameSettings.refreshInterval}ms`);
-      intervalId = setInterval(updateBoard, gameSettings.refreshInterval);
+      const runUpdate = async () => {
+        await updateBoard();
+        intervalId = setTimeout(runUpdate, gameSettings.refreshInterval);
+      };
+      runUpdate();
     }
     return () => {
       if (intervalId) {
         console.log('Cleaning up board update interval');
-        clearInterval(intervalId);
+        clearTimeout(intervalId);
       }
     };
   }, [gameSettings.isRunning, gameSettings.refreshInterval, updateBoard]);
@@ -228,6 +232,11 @@ function App() {
       console.error('fillBoard: Error:', error);
       setStatus(prev => ({ ...prev, error: 'Failed to fill the board. Please try again.' }));
     }
+  };
+
+  const startGame = async () => {
+    await fetchBoard(); // Ensure we have the latest state
+    setGameSettings(prev => ({ ...prev, isRunning: true }));
   };
 
   return (
