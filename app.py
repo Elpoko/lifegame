@@ -4,25 +4,28 @@ import random
 import os
 
 app = Flask(__name__, static_folder='frontend/build', static_url_path='')
-CORS(app)
+CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 ROWS   = 8
 COLUMNS = 8
-P_LIVE = 0.5
+P_LIVE = 0.5  # This is now the initial value
+MAX_ROWS = 50
+MAX_COLUMNS = 50
 
 class Board:
     def __init__(self, rows, columns):
-        self.rows = rows
-        self.columns = columns
-        self.board_state = [[0 for _ in range(columns)] for _ in range(rows)]
+        self.rows = min(rows, MAX_ROWS)
+        self.columns = min(columns, MAX_COLUMNS)
+        self.board_state = [[0 for _ in range(self.columns)] for _ in range(self.rows)]
         self.previous_state = None
+        self.p_live = P_LIVE  # Use the initial value
 
     def zero(self):
         self.board_state = [[0 for _ in range(self.columns)] for _ in range(self.rows)]
 
     def randomize(self):
         while True:
-            self.board_state = [[1 if random.random() < P_LIVE else 0 for _ in range(self.columns)] for _ in range(self.rows)]
+            self.board_state = [[1 if random.random() < self.p_live else 0 for _ in range(self.columns)] for _ in range(self.rows)]
             if self.check_for_life():
                 break
 
@@ -50,14 +53,18 @@ class Board:
 
     def customise(self):
         new_board = request.json.get('board')
+        print("Received board:", new_board)  # Add this line for debugging
         if not new_board or len(new_board) != self.rows or any(len(row) != self.columns for row in new_board):
+            print(f"Invalid input. Expected {self.rows}x{self.columns} board, got: {new_board}")  # Add this line
             return jsonify({"error": f"Invalid input. Please provide a {self.rows}x{self.columns} board."}), 400
 
         for i, row in enumerate(new_board):
             if not all(cell in [0, 1] for cell in row):
+                print(f"Invalid input in row {i+1}. Row contains values other than 0 or 1: {row}")  # Add this line
                 return jsonify({"error": f"Invalid input in row {i+1}. Please use only 0 or 1."}), 400
 
         self.board_state = new_board
+        print("Board state updated:", self.board_state)  # Add this line
         return jsonify({"message": "Board customized successfully", "board": self.board_state})
 
     def change_size(self):
@@ -67,6 +74,9 @@ class Board:
             new_columns = int(data.get('columns', self.columns))
         except ValueError:
             return jsonify({"error": "Invalid input. Rows and columns must be integers."}), 400
+        
+        if new_rows > MAX_ROWS or new_columns > MAX_COLUMNS:
+            return jsonify({"error": f"Board size cannot exceed {MAX_ROWS}x{MAX_COLUMNS}."}), 400
         
         self.rows = new_rows
         self.columns = new_columns 
@@ -90,8 +100,18 @@ class Board:
         return {
             "board": self.board_state,
             "rows": self.rows,
-            "columns": self.columns
+            "columns": self.columns,
+            "p_live": self.p_live  # Include p_live in the response
         }
+
+    def clear(self):
+        self.board_state = [[0 for _ in range(self.columns)] for _ in range(self.rows)]
+
+    def fill(self):
+        self.board_state = [[1 for _ in range(self.columns)] for _ in range(self.rows)]
+
+    def set_p_live(self, p_live):
+        self.p_live = max(0, min(1, p_live))  # Ensure p_live is between 0 and 1
 
 def count_live_neighbors(board, row, col):
     live_neighbors = 0
@@ -121,6 +141,8 @@ def get_board():
 @app.route('/api/randomize', methods=['POST'])
 def randomize_board():
     try:
+        p_live = request.json.get('p_live', board.p_live)
+        board.set_p_live(p_live)
         board.randomize()
         return jsonify(board.to_dict())
     except Exception as e:
@@ -140,6 +162,28 @@ def change_board_size():
 def customize_board():
     return board.customise()
 
+@app.route('/api/clear', methods=['POST'])
+def clear_board():
+    board.clear()
+    return jsonify(board.to_dict())
+
+@app.route('/api/fill', methods=['POST'])
+def fill_board():
+    board.fill()
+    return jsonify(board.to_dict())
+
+@app.route('/api/set_p_live', methods=['POST'])
+def set_p_live():
+    try:
+        p_live = request.json.get('p_live')
+        if p_live is not None:
+            board.set_p_live(float(p_live))
+            return jsonify({"message": "P_LIVE updated successfully", "p_live": board.p_live})
+        else:
+            return jsonify({"error": "Missing p_live parameter"}), 400
+    except ValueError:
+        return jsonify({"error": "Invalid p_live value"}), 400
+
 @app.errorhandler(400)
 def bad_request(error):
     return jsonify({"error": "Bad request"}), 400
@@ -155,24 +199,13 @@ def internal_server_error(error):
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def serve(path):
-    app.logger.info(f"Requested path: {path}")
-    app.logger.info(f"Static folder: {app.static_folder}")
-    app.logger.info(f"Does static folder exist? {os.path.exists(app.static_folder)}")
-    
-    if path != "" and os.path.exists(os.path.join(app.static_folder, path)):
-        app.logger.info(f"Serving file: {path}")
+    if path.startswith('api/'):
+        # Handle API routes
+        return app.send_static_file('index.html')
+    elif path != "" and os.path.exists(os.path.join(app.static_folder, path)):
         return send_from_directory(app.static_folder, path)
     else:
-        index_path = os.path.join(app.static_folder, 'index.html')
-        app.logger.info(f"Attempting to serve index.html from {index_path}")
-        app.logger.info(f"Does index.html exist? {os.path.exists(index_path)}")
-        
-        if os.path.exists(index_path):
-            app.logger.info("Serving index.html")
-            return send_from_directory(app.static_folder, 'index.html')
-        else:
-            app.logger.error("index.html not found")
-            return "index.html not found", 404
+        return send_from_directory(app.static_folder, 'index.html')
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
