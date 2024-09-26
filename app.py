@@ -199,10 +199,7 @@ def internal_server_error(error):
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def serve(path):
-    if path.startswith('api/'):
-        # Handle API routes
-        return app.send_static_file('index.html')
-    elif path != "" and os.path.exists(os.path.join(app.static_folder, path)):
+    if path != "" and os.path.exists(app.static_folder + '/' + path):
         return send_from_directory(app.static_folder, path)
     else:
         return send_from_directory(app.static_folder, 'index.html')
