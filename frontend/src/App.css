@@ -77,3 +77,47 @@
     transform: rotate(360deg);
   }
 }
+
+.size-error {
+  color: red;
+  font-weight: bold;
+  animation: fadeOut 5s forwards;
+}
+
+@keyframes fadeOut {
+  0% { opacity: 1; }
+  70% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* New slider styles */
+.p-live-control {
+  margin: 20px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.p-live-control label {
+  margin-bottom: 10px;
+}
+
+.p-live-control input[type="range"] {
+  width: 200px;
+}
+
+/* Styles for the refresh interval slider */
+.refresh-interval-control {
+  margin: 20px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.refresh-interval-control label {
+  margin-bottom: 10px;
+}
+
+.refresh-interval-control input[type="range"] {
+  width: 200px;
+}
