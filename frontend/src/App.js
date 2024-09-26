@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import './App.css';
 
@@ -22,27 +22,29 @@ function App() {
   const [pLive, setPLive] = useState(0.5); // New state for P_LIVE
   const [refreshInterval, setRefreshInterval] = useState(200); // Default to 200ms
 
+  const updateIntervalRef = useRef(null);
+
   // Fetch the initial board when the component mounts
   useEffect(() => {
     fetchBoard();
   }, []);
 
-  // Modify the useEffect hook for board updates
+  // Modified useEffect for board updates
   useEffect(() => {
-    let interval;
     if (isRunning) {
       console.log(`Setting up interval for ${refreshInterval}ms`);
-      interval = setInterval(() => {
-        console.log('Interval triggered, updating board');
-        updateBoard();
-      }, refreshInterval);
+      updateIntervalRef.current = setInterval(updateBoard, refreshInterval);
     } else {
       console.log('Clearing interval');
+      if (updateIntervalRef.current) {
+        clearInterval(updateIntervalRef.current);
+      }
     }
+
     return () => {
-      if (interval) {
+      if (updateIntervalRef.current) {
         console.log('Cleaning up interval');
-        clearInterval(interval);
+        clearInterval(updateIntervalRef.current);
       }
     };
   }, [isRunning, refreshInterval]);
@@ -52,7 +54,7 @@ function App() {
     setIsLoading(true);
     console.log('Fetching board from:', API_URL);
     try {
-      const response = await axios.get(`${API_URL}/board`);
+      const response = await axios.get(`${API_URL}/board`, { timeout: 10000 });
       console.log('fetchBoard: Fetched board data:', response.data);
       
       const boardData = response.data;
@@ -66,6 +68,7 @@ function App() {
         setError(null);
       } else {
         console.error('fetchBoard: Error: Invalid board data', boardData);
+        setError('Invalid board data received. Please try again.');
       }
     } catch (error) {
       console.error('fetchBoard: Error fetching board:', error);
@@ -114,7 +117,7 @@ function App() {
     }
   };
 
-  // Modify the updateBoard function
+  // Modified updateBoard function
   const updateBoard = async () => {
     if (!isRunning) {
       console.log('updateBoard called but game is not running, skipping update');
@@ -122,7 +125,7 @@ function App() {
     }
     try {
       console.log('updateBoard: Updating board');
-      const response = await axios.post(`${API_URL}/update`);
+      const response = await axios.post(`${API_URL}/update`, null, { timeout: 5000 });
       console.log('updateBoard: Update response:', response.data);
       if (response.data && Array.isArray(response.data.board)) {
         console.log('updateBoard: Setting new board state:', response.data.board);
@@ -137,11 +140,14 @@ function App() {
       }
     } catch (error) {
       console.error('updateBoard: Error updating board:', error);
+      if (error.code === 'ECONNABORTED') {
+        console.error('Request timed out');
+      }
       setIsRunning(false);
     }
   };
 
-  // Modify the toggleRunning function
+  // Modified toggleRunning function
   const toggleRunning = async () => {
     if (customizing) {
       await finishCustomizing();
