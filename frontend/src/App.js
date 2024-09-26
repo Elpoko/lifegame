@@ -101,6 +101,7 @@ function App() {
         setRows(boardData.rows);
         setColumns(boardData.columns);
         console.log("randomizeBoard successful")
+        console.log(boardData)
       } else {
         console.error('randomizeBoard:Invalid board data received:', boardData);
       }
