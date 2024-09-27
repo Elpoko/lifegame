@@ -130,12 +130,10 @@ class Board:
         }
 
     def clear(self):
-        with lock:
-            self.board_state = [[0 for _ in range(self.columns)] for _ in range(self.rows)]
+        self.board_state = [[0 for _ in range(self.columns)] for _ in range(self.rows)]
 
     def fill(self):
-        with lock:
-            self.board_state = [[1 for _ in range(self.columns)] for _ in range(self.rows)]
+        self.board_state = [[1 for _ in range(self.columns)] for _ in range(self.rows)]
 
     def set_p_live(self, p_live):
         self.p_live = max(0, min(1, p_live))  # Ensure p_live is between 0 and 1
@@ -199,13 +197,15 @@ def customize_board():
 
 @app.route('/api/clear', methods=['POST'])
 def clear_board():
+    global board
     board.clear()
-    return jsonify(board.to_dict())
+    return jsonify({"board": board.board_state, "message": "Board cleared"})
 
 @app.route('/api/fill', methods=['POST'])
 def fill_board():
+    global board
     board.fill()
-    return jsonify(board.to_dict())
+    return jsonify({"board": board.board_state, "message": "Board filled"})
 
 @app.route('/api/set_p_live', methods=['POST'])
 def set_p_live():
