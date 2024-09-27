@@ -5,17 +5,27 @@ const useGameLogic = (API_URL, boardState, setBoardState, setStatus, setGameSett
   const fetchBoard = useCallback(async () => {
     setStatus({ isLoading: true, error: null });
     try {
-      const response = await axios.get(`${API_URL}/board`);
-      const { board, rows, columns, p_live } = response.data;
+      // First, initialize the board
+      const initResponse = await axios.get(`${API_URL}/board`);
+      const { board, rows, columns, p_live } = initResponse.data;
       if (board && Array.isArray(board) && rows && columns && typeof p_live === 'number') {
         setBoardState({ board, rows, columns });
         setGameSettings(prev => ({ ...prev, pLive: p_live }));
       } else {
-        throw new Error('Invalid board data received');
+        throw new Error('Invalid board data received during initialization');
+      }
+
+      // Then, clear the board
+      const clearResponse = await axios.post(`${API_URL}/clear`);
+      const clearedBoard = clearResponse.data.board;
+      if (Array.isArray(clearedBoard)) {
+        setBoardState(prev => ({ ...prev, board: clearedBoard }));
+      } else {
+        throw new Error('Invalid board data received during clearing');
       }
     } catch (error) {
       console.error('fetchBoard: Error:', error);
-      setStatus({ isLoading: false, error: 'Failed to fetch the board. Please try again.' });
+      setStatus({ isLoading: false, error: 'Failed to initialize or clear the board. Please try again.' });
     } finally {
       setStatus(prev => ({ ...prev, isLoading: false }));
     }

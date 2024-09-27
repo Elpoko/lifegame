@@ -15,9 +15,6 @@ COLUMNS = 8
 P_LIVE = 0.5  # This is now the initial value
 MAX_ROWS = 50
 MAX_COLUMNS = 50
-
-# Add this at the top of the file, after the imports and before the Board class
-UPDATE_COUNTER = 0
 board = None  # Initialize board as None
 
 def initialize_board():
@@ -44,8 +41,7 @@ class Board:
         logger.info(f"randomize: Board randomized. New state: {self.board_state}")
 
     def update(self):
-        global UPDATE_COUNTER
-        logger.info(f"update: Starting board update, id {UPDATE_COUNTER}. Current state: {self.board_state}")
+        logger.info(f"update: Starting board update. Current state: {self.board_state}")
         new_board_state = [[0 for _ in range(self.columns)] for _ in range(self.rows)]
         for i in range(self.rows):
             for j in range(self.columns):
@@ -56,8 +52,7 @@ class Board:
         self.previous_state = self.board_state
         self.board_state = new_board_state
             
-        logger.info(f"update: Finished board update, id {UPDATE_COUNTER}. New state: {self.board_state}. Is static: {is_static}")
-        UPDATE_COUNTER += 1
+        logger.info(f"update: Finished board update. New state: {self.board_state}. Is static: {is_static}")
         return is_static
 
     def is_static(self):
@@ -131,7 +126,7 @@ class Board:
     def fill(self):
         self.board_state = [[1 for _ in range(self.columns)] for _ in range(self.rows)]
 
-    def set_p_live(self, p_live):
+    def update_p_live(self, p_live):
         self.p_live = max(0, min(1, p_live))  # Ensure p_live is between 0 and 1
 
     def set_board_state(self, new_state):
@@ -174,7 +169,7 @@ def randomize_board():
     try:
         p_live = request.json.get('p_live', board.p_live) if request.json else board.p_live
         logger.info(f"Randomizing board with p_live: {p_live}")
-        board.set_p_live(p_live)
+        board.update_p_live(p_live)
         board.randomize()
         result = board.to_dict()
         logger.info(f"Randomized board: {result}")
@@ -210,11 +205,11 @@ def fill_board():
     return jsonify({"board": board.board_state, "message": "Board filled"})
 
 @app.route('/api/update_p_live', methods=['POST'])
-def set_p_live():
+def update_p_live():
     try:
         p_live = request.json.get('p_live')
         if p_live is not None:
-            board.set_p_live(float(p_live))
+            board.update_p_live(float(p_live))
             return jsonify({"message": "P_LIVE updated successfully", "p_live": board.p_live})
         else:
             return jsonify({"error": "Missing p_live parameter"}), 400

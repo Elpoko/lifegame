@@ -114,6 +114,16 @@ function App() {
       {status.error && (
         <p className="size-error fade-out">{status.error}</p>
       )}
+      <div className="todos-section">
+        <h2>Todos</h2>
+        <ul>
+            <li>Add some presets</li>
+            <li>Make board infinite</li>
+            <li>Add board wrap option?</li>
+            <li>Make multiplayer possible</li>
+            <li>Allow drag to select on board</li>
+        </ul>
+      </div>
     </div>
   );
 }
