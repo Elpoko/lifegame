@@ -233,6 +233,13 @@ def serve(path):
     else:
         return send_from_directory(app.static_folder, 'index.html')
 
+@app.route('/start', methods=['POST'])
+def start_game():
+    global board
+    with lock:
+        print("Initial board state:", board)  # Log the initial state
+        # ... rest of the function
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     logger.info(f"Starting server on port {port}")

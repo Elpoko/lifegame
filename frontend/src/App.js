@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import './App.css';
+import Board from './components/Board';
 
 const API_URL = process.env.NODE_ENV === 'production' ? '/api' : `http://localhost:${process.env.PORT || 5000}/api`;
 
@@ -14,9 +15,10 @@ function App() {
 
   const fetchBoard = useCallback(async () => {
     setStatus({ isLoading: true, error: null });
+    console.log('running fetchBoard! Should only run once.');
     try {
       const timestamp = new Date().getTime();
-      const response = await axios.get(`${API_URL}/board?t=${timestamp}`, { timeout: 10000 });
+      const response = await axios.get(`${API_URL}/board?t=${timestamp}`, { timeout: 5000 });
       const { board, rows, columns, p_live } = response.data;
       
       if (board && Array.isArray(board) && rows && columns && typeof p_live === 'number') {
@@ -34,6 +36,7 @@ function App() {
   }, []);
 
   useEffect(() => {
+    console.log('fetchBoard effect running at:', new Date().toISOString());
     let isMounted = true;
     fetchBoard().then(() => {
       if (!isMounted) {
@@ -41,13 +44,16 @@ function App() {
       }
     });
     return () => {
+      console.log('fetchBoard effect cleanup at:', new Date().toISOString());
       isMounted = false;
     };
   }, [fetchBoard]);
 
   const updateBoard = useCallback(async () => {
-    if (!gameSettings.isRunning) return;
-    
+    if (!gameSettings.isRunning) {
+      console.log('updateBoard: Game is not running, skipping update.');
+      return;
+    }
     try {
       const response = await axios.post(`${API_URL}/update`, null, { timeout: 5000 });
       if (response.data && Array.isArray(response.data.board)) {
@@ -55,6 +61,7 @@ function App() {
         if (response.data.isStatic) {
           setGameSettings(prev => ({ ...prev, isRunning: false }));
         }
+        console.log('updateBoard: Board updated, board: ', response.data.board);
       } else {
         throw new Error('Invalid board data received');
       }
@@ -131,34 +138,36 @@ function App() {
     setIsCustomizing(true);
   }, [gameSettings.isRunning]);
 
-  const startCustomizing = () => {
-    if (gameSettings.isRunning) {
-      setGameSettings(prev => ({ ...prev, isRunning: false }));
-    }
-    setIsCustomizing(true);
-  };
-
-  const finishCustomizing = async () => {
-    if (!isCustomizing) return;
-    
-    try {
-      const response = await axios.post(`${API_URL}/customize`, { board: boardState.board });
-      if (response.data && Array.isArray(response.data.board)) {
-        setBoardState(prev => ({ ...prev, board: response.data.board }));
-        setIsCustomizing(false);
-        setStatus(prev => ({ ...prev, error: null }));
-      } else {
-        throw new Error('Invalid board data received');
+  const toggleCustomizing = async () => {
+    if (isCustomizing) {
+      // This was previously finishCustomizing
+      try {
+        const response = await axios.post(`${API_URL}/customize`, { board: boardState.board });
+        if (response.data && Array.isArray(response.data.board)) {
+          setBoardState(prev => ({ ...prev, board: response.data.board }));
+          setStatus(prev => ({ ...prev, error: null }));
+        } else {
+          throw new Error('Invalid board data received');
+        }
+      } catch (error) {
+        console.error('toggleCustomizing: Error:', error);
+        setStatus(prev => ({ ...prev, error: 'Failed to update custom board. Please try again.' }));
+        // Return early to prevent setting isCustomizing to false if there was an error
+        return;
       }
-    } catch (error) {
-      console.error('finishCustomizing: Error:', error);
-      setStatus(prev => ({ ...prev, error: 'Failed to update custom board. Please try again.' }));
+    } else {
+      // This was previously startCustomizing
+      if (gameSettings.isRunning) {
+        setGameSettings(prev => ({ ...prev, isRunning: false }));
+      }
     }
+    // Toggle the isCustomizing state
+    setIsCustomizing(prev => !prev);
   };
 
   const toggleRunning = async () => {
     if (isCustomizing) {
-      await finishCustomizing();
+      await toggleCustomizing();
     }
     setGameSettings(prev => ({ ...prev, isRunning: !prev.isRunning }));
   };
@@ -234,45 +243,24 @@ function App() {
     }
   };
 
-  const startGame = async () => {
-    await fetchBoard(); // Ensure we have the latest state
-    setGameSettings(prev => ({ ...prev, isRunning: true }));
-  };
-
   return (
     <div className="App">
       <h1>Game of Life</h1>
-      <div className="board">
-        {status.isLoading ? (
-          <p>Loading board...</p>
-        ) : status.error ? (
-          <p className="error">{status.error}</p>
-        ) : boardState.board && Array.isArray(boardState.board) && boardState.board.length > 0 ? (
-          boardState.board.map((row, i) => (
-            <div key={i} className="row">
-              {Array.isArray(row) && row.map((cell, j) => (
-                <div 
-                  key={j} 
-                  className={`cell ${cell ? 'alive' : 'dead'}`}
-                  onClick={() => toggleCell(i, j)}
-                ></div>
-              ))}
-            </div>
-          ))
-        ) : (
-          <p>No board data available.</p>
-        )}
-      </div>
+      <Board
+        boardState={boardState}
+        status={status}
+        isCustomizing={isCustomizing}
+        gameSettings={gameSettings}
+        toggleCell={toggleCell}
+      />
       <div className="controls">
         <button onClick={randomizeBoard}>Randomize</button>
         <button onClick={toggleRunning}>{gameSettings.isRunning ? 'Stop' : 'Start'}</button>
         <button onClick={clearBoard}>Clear</button>
         <button onClick={fillBoard}>Fill</button>
-        {isCustomizing ? (
-          <button onClick={finishCustomizing}>Finish Customizing</button>
-        ) : (
-          <button onClick={startCustomizing}>Customize</button>
-        )}
+        <button onClick={toggleCustomizing}>
+          {isCustomizing ? 'Finish Customizing' : 'Customize'}
+        </button>
         <div>
           <input 
             type="number" 
