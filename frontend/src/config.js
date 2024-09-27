@@ -1,0 +1,1 @@
+export const API_URL = process.env.NODE_ENV === 'production' ? '/api' : `http://localhost:${process.env.PORT || 5000}/api`;
