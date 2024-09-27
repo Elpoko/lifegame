@@ -5,6 +5,10 @@ import os
 import logging
 import threading
 
+# Add this at the top of the file, after the imports
+global UPDATE_COUNTER
+UPDATE_COUNTER = 0
+
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -41,8 +45,9 @@ class Board:
             logger.info(f"randomize: Board randomized. New state: {self.board_state}")
 
     def update(self):
+        global UPDATE_COUNTER
         with lock:
-            logger.info(f"update: Updating board. Current state: {self.board_state}")
+            logger.info(f"update: Starting board update, id {UPDATE_COUNTER}. Current state: {self.board_state}")
             new_board_state = [[0 for _ in range(self.columns)] for _ in range(self.rows)]
             for i in range(self.rows):
                 for j in range(self.columns):
@@ -53,7 +58,8 @@ class Board:
             self.previous_state = self.board_state
             self.board_state = new_board_state
             
-            logger.info(f"update: Board updated. New state: {self.board_state}. Is static: {is_static}")
+            logger.info(f"update: Finished board update, id {UPDATE_COUNTER}. New state: {self.board_state}. Is static: {is_static}")
+            UPDATE_COUNTER += 1
             return is_static
 
     def is_static(self):
@@ -179,8 +185,8 @@ def randomize_board():
 
 @app.route('/api/update', methods=['POST'])
 def update_board():
+    logger.info("API - update_board: Received update request")
     is_static = board.update()
-    logger.info(f"update_board: Board updated. Is static: {is_static}. Current state: {board.board_state}")
     return jsonify({"board": board.board_state, "isStatic": is_static})
 
 @app.route('/api/change_size', methods=['POST'])

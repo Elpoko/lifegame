@@ -8,6 +8,7 @@ const API_URL = process.env.NODE_ENV === 'production' ? '/api' : `http://localho
 console.log('API_URL:', API_URL);
 
 function App() {
+  console.log('API_URL in App component:', API_URL);
   const [boardState, setBoardState] = useState({ board: [], rows: 8, columns: 8 });
   const [status, setStatus] = useState({ isLoading: true, error: null });
   const [gameSettings, setGameSettings] = useState({ isRunning: false, pLive: 0.5, refreshInterval: 200 });
@@ -51,7 +52,6 @@ function App() {
 
   const updateBoard = useCallback(async () => {
     if (!gameSettings.isRunning) {
-      console.log('updateBoard: Game is not running, skipping update.');
       return;
     }
     try {
@@ -61,7 +61,6 @@ function App() {
         if (response.data.isStatic) {
           setGameSettings(prev => ({ ...prev, isRunning: false }));
         }
-        console.log('updateBoard: Board updated, board: ', response.data.board);
       } else {
         throw new Error('Invalid board data received');
       }
@@ -74,7 +73,6 @@ function App() {
   useEffect(() => {
     let intervalId;
     if (gameSettings.isRunning) {
-      console.log(`Setting up interval for ${gameSettings.refreshInterval}ms`);
       const runUpdate = async () => {
         await updateBoard();
         intervalId = setTimeout(runUpdate, gameSettings.refreshInterval);
@@ -83,7 +81,6 @@ function App() {
     }
     return () => {
       if (intervalId) {
-        console.log('Cleaning up board update interval');
         clearTimeout(intervalId);
       }
     };
@@ -140,7 +137,6 @@ function App() {
 
   const toggleCustomizing = async () => {
     if (isCustomizing) {
-      // This was previously finishCustomizing
       try {
         const response = await axios.post(`${API_URL}/customize`, { board: boardState.board });
         if (response.data && Array.isArray(response.data.board)) {
@@ -152,16 +148,13 @@ function App() {
       } catch (error) {
         console.error('toggleCustomizing: Error:', error);
         setStatus(prev => ({ ...prev, error: 'Failed to update custom board. Please try again.' }));
-        // Return early to prevent setting isCustomizing to false if there was an error
         return;
       }
     } else {
-      // This was previously startCustomizing
       if (gameSettings.isRunning) {
         setGameSettings(prev => ({ ...prev, isRunning: false }));
       }
     }
-    // Toggle the isCustomizing state
     setIsCustomizing(prev => !prev);
   };
 
