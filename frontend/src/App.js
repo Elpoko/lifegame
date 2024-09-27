@@ -116,13 +116,16 @@ function App() {
       )}
       <div className="todos-section">
         <h2>Todos</h2>
-        <ul>
+        <ul style={{ textAlign: 'left', listStyleType: 'disc', paddingLeft: '20px' }}>
             <li>Add some presets</li>
             <li>Make board infinite</li>
             <li>Add board wrap option?</li>
             <li>Make multiplayer possible</li>
             <li>Allow drag to select on board</li>
         </ul>
+      </div>
+      <div className="footer">
+        <p><a href="https://tommccarthy.net">Back to homepage</a></p>
       </div>
     </div>
   );
