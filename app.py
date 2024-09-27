@@ -209,7 +209,7 @@ def fill_board():
     board.fill()
     return jsonify({"board": board.board_state, "message": "Board filled"})
 
-@app.route('/api/set_p_live', methods=['POST'])
+@app.route('/api/update_p_live', methods=['POST'])
 def set_p_live():
     try:
         p_live = request.json.get('p_live')
